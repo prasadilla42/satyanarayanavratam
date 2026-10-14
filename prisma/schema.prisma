@@ -3,11 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  // Pooled connection string (used by the app at runtime)
-  url       = env("DATABASE_URL")
-  // Direct connection string (used by `prisma migrate`). Same value is fine for most hosts.
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
+  // PostgreSQL connection string (postgres:// or postgresql://)
+  url      = env("DATABASE_URL")
 }
 
 enum BookingStatus {
