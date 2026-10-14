@@ -39,12 +39,15 @@ cp .env.example .env     # then fill in the values (see below)
 
 ### 2. Database (PostgreSQL)
 
-Create a free database at [Neon](https://neon.tech) (or Supabase / Vercel Postgres) and put the
-connection strings in `DATABASE_URL` and `DIRECT_URL`. Then create the tables:
+Create a free database at [Neon](https://neon.tech) (or Supabase / Vercel Postgres / Prisma Postgres) and
+put its connection string in `DATABASE_URL`. It must start with `postgres://` or `postgresql://`
+(a `prisma+postgres://` URL such as `PRISMA_DATABASE_URL` will not work). Then create the tables:
 
 ```bash
-npx prisma migrate deploy
+npm run db:deploy
 ```
+
+`DIRECT_URL` is optional (a non-pooled URL used only for migrations). `DATABASE_URL` is used if it isn't set.
 
 ### 3. Stripe
 
