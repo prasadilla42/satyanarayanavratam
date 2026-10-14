@@ -93,13 +93,13 @@ async function ConfirmationContent({
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-3xl border-2 border-gold bg-white p-6 text-center shadow-xl sm:p-9">{children}</div>
+    <div className="rounded-3xl border-2 border-gold bg-white p-5 text-center shadow-xl min-[400px]:p-6 sm:p-9">{children}</div>
   );
 }
 
 function HomeLink() {
   return (
-    <Link href="/" className="mt-6 inline-block rounded-full bg-maroon px-6 py-2.5 font-bold text-white hover:bg-maroon-dark">
+    <Link href="/" className="mt-6 inline-block rounded-full bg-maroon px-6 py-3 font-bold text-white hover:bg-maroon-dark">
       Back to the event page
     </Link>
   );
@@ -126,9 +126,9 @@ function Reference({ label, value }: { label: string; value: string }) {
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex justify-between gap-6 py-2.5 text-left">
-      <dt className="text-sm text-ink/60">{label}</dt>
-      <dd className="text-right font-semibold">{children}</dd>
+    <div className="flex flex-col gap-0.5 py-2.5 text-left sm:flex-row sm:justify-between sm:gap-6">
+      <dt className="shrink-0 text-sm text-ink/60">{label}</dt>
+      <dd className="min-w-0 break-words font-semibold sm:text-right">{children}</dd>
     </div>
   );
 }
@@ -215,10 +215,10 @@ function BookingView({ booking: b }: { booking: Booking }) {
       </p>
 
       <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-        <a href={EVENT.mapsDirectionsUrl} target="_blank" rel="noopener noreferrer" className="rounded-full bg-saffron px-6 py-2.5 font-bold text-white hover:bg-saffron-dark">
+        <a href={EVENT.mapsDirectionsUrl} target="_blank" rel="noopener noreferrer" className="rounded-full bg-saffron px-6 py-3 text-center font-bold text-white hover:bg-saffron-dark">
           Get directions
         </a>
-        <Link href="/" className="rounded-full border-2 border-maroon px-6 py-2.5 font-bold text-maroon hover:bg-maroon hover:text-white">
+        <Link href="/" className="rounded-full border-2 border-maroon px-6 py-3 text-center font-bold text-maroon hover:bg-maroon hover:text-white">
           Back to event page
         </Link>
       </div>

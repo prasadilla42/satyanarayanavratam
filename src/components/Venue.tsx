@@ -6,12 +6,12 @@ export function Venue() {
   const hasContact = Boolean(contact.name || contact.email || contact.phone);
 
   return (
-    <section id="venue" className="bg-cream-dark/60 px-4 py-16 sm:py-20">
+    <section id="venue" className="bg-cream-dark/60 px-4 py-12 sm:py-20">
       <SectionHeading eyebrow="Find us" title="Venue &amp; Contact" />
 
       <div className="mx-auto mt-10 grid max-w-6xl gap-6 lg:grid-cols-2">
         <div className="space-y-5">
-          <div className="rounded-2xl border border-gold/40 bg-white p-6 shadow-sm">
+          <div className="rounded-2xl border border-gold/40 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex items-start gap-3">
               <PinIcon className="mt-1 h-6 w-6 shrink-0 text-saffron-dark" />
               <div>
@@ -21,7 +21,7 @@ export function Venue() {
                   href={EVENT.mapsDirectionsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-4 inline-block rounded-full bg-maroon px-6 py-2.5 font-bold text-white hover:bg-maroon-dark"
+                  className="mt-4 inline-block rounded-full bg-maroon px-6 py-3 font-bold text-white hover:bg-maroon-dark"
                 >
                   Get directions
                 </a>
@@ -39,8 +39,8 @@ export function Venue() {
                   {timings.length > 0 ? (
                     <ul className="w-full space-y-1">
                       {timings.map((t) => (
-                        <li key={t.time + t.label} className="flex justify-between gap-4">
-                          <span className="font-semibold">{t.time}</span>
+                        <li key={t.time + t.label} className="flex flex-col gap-0 sm:flex-row sm:justify-between sm:gap-4">
+                          <span className="whitespace-nowrap font-semibold">{t.time}</span>
                           <span>{t.label}</span>
                         </li>
                       ))}
@@ -81,11 +81,11 @@ export function Venue() {
           </div>
         </div>
 
-        <div className="min-h-[320px] overflow-hidden rounded-2xl border border-gold/40 bg-white shadow-sm">
+        <div className="min-h-[300px] overflow-hidden rounded-2xl border border-gold/40 bg-white shadow-sm sm:min-h-[360px]">
           <iframe
             title={`Map showing ${EVENT.venueName}, ${EVENT.address}`}
             src={EVENT.mapsEmbedUrl}
-            className="h-full min-h-[320px] w-full border-0"
+            className="h-full min-h-[300px] w-full border-0 sm:min-h-[360px]"
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
             allowFullScreen

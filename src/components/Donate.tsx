@@ -71,16 +71,16 @@ export function Donate() {
   }
 
   return (
-    <section id="donate" className="pattern-maroon px-4 py-16 text-white sm:py-20">
+    <section id="donate" className="pattern-maroon px-4 py-12 text-white sm:py-20">
       <SectionHeading eyebrow="Seva" title="Make a Donation" light>
         Support the Vratam with a donation of any amount. You don&apos;t need to register for a ticket to donate.
       </SectionHeading>
 
-      <form onSubmit={onSubmit} noValidate className="mx-auto mt-10 max-w-2xl rounded-3xl bg-cream p-6 text-ink shadow-2xl sm:p-8">
+      <form onSubmit={onSubmit} noValidate className="mx-auto mt-8 max-w-2xl rounded-3xl bg-cream p-4 text-ink shadow-2xl min-[400px]:p-6 sm:mt-10 sm:p-8">
         <fieldset>
           <legend className="mb-3 font-display text-xl font-bold text-maroon">Choose an amount</legend>
-          <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
-            {DONATION_PRESETS_GBP.map((p) => {
+          <div className="grid grid-cols-6 gap-3 sm:grid-cols-5">
+            {DONATION_PRESETS_GBP.map((p, idx) => {
               const selected = !custom && preset === p;
               return (
                 <button
@@ -92,7 +92,7 @@ export function Donate() {
                     setCustom("");
                     setErrors((er) => ({ ...er, amountPence: "" }));
                   }}
-                  className={`rounded-xl border-2 py-3 text-xl font-bold transition ${
+                  className={`${idx < 3 ? "col-span-2" : "col-span-3"} rounded-xl border-2 py-3 text-xl font-bold transition sm:col-span-1 ${
                     selected
                       ? "border-saffron bg-saffron text-white shadow"
                       : "border-gold/60 bg-white text-maroon hover:border-saffron"

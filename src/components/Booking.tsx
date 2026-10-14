@@ -105,7 +105,7 @@ function TicketCard({
 
   return (
     <div
-      className={`relative rounded-2xl p-5 shadow-sm transition ${
+      className={`relative rounded-2xl p-4 shadow-sm transition sm:p-5 ${
         featured ? "border-2 border-gold bg-gradient-to-br from-white to-cream-dark" : "border border-gold/40 bg-white"
       } ${qty > 0 ? "ring-4 ring-saffron/40" : ""}`}
     >
@@ -131,7 +131,7 @@ function TicketCard({
           </p>
         </div>
         <div className="text-right">
-          <div className={`font-display font-bold text-maroon ${featured ? "text-5xl" : "text-4xl"}`}>
+          <div className={`font-display font-bold text-maroon ${featured ? "text-4xl sm:text-5xl" : "text-3xl sm:text-4xl"}`}>
             {featured ? formatGBP(t.pricePence) : "£0"}
           </div>
           <div className="text-xs text-ink/60">{featured ? "per ticket" : "free"}</div>
@@ -246,7 +246,7 @@ export function Booking() {
   const invalid = (k: string) => (errors[k] ? true : undefined);
 
   return (
-    <section id="tickets" className="px-4 py-16 sm:py-20">
+    <section id="tickets" className="px-4 py-12 sm:py-20">
       <SectionHeading eyebrow="Registration" title="Tickets &amp; Registration">
         Choose your tickets, enter your details and review your booking. You will only be taken to a secure
         payment page if payment is required.
@@ -272,7 +272,7 @@ export function Booking() {
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-maroon text-base text-gold-light">1</span>
               Choose your tickets
             </h3>
-            <div className="space-y-6">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-1">
               <TicketCard type="yajamani" qty={yQty} max={yMax} remaining={yRemaining} onChange={setYajamaniQty} error={errors.yajamaniQty} />
               <TicketCard type="general" qty={gQty} max={gMax} remaining={gRemaining} onChange={setGeneralQty} error={errors.generalQty} />
             </div>
@@ -284,7 +284,7 @@ export function Booking() {
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-maroon text-base text-gold-light">2</span>
               Your details
             </h3>
-            <div className="grid gap-4 rounded-2xl border border-gold/40 bg-white p-5 shadow-sm sm:grid-cols-2">
+            <div className="grid gap-4 rounded-2xl border border-gold/40 bg-white p-4 shadow-sm sm:grid-cols-2 sm:p-5">
               <div className="sm:col-span-2">
                 <Field id="name" label="Full name" required error={errors.name}>
                   <input id="name" name="name" autoComplete="name" value={form.name} onChange={set("name")} aria-invalid={invalid("name")} aria-describedby={errors.name ? "name-error" : undefined} className={inputClass} placeholder="e.g. Lakshmi Devi" />
@@ -323,7 +323,7 @@ export function Booking() {
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-maroon text-base text-gold-light">3</span>
             Review &amp; confirm
           </h3>
-          <div className="rounded-2xl border-2 border-gold bg-white p-5 shadow-md">
+          <div className="rounded-2xl border-2 border-gold bg-white p-4 shadow-md sm:p-5">
             {hasTickets ? (
               <ul className="space-y-3">
                 {yQty > 0 && (

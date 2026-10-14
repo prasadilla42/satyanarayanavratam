@@ -17,6 +17,8 @@
 
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -30,6 +32,18 @@ body {
   color: var(--color-ink);
   font-family: var(--font-body), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: clip;
+}
+
+/* Remove the 300ms tap delay / accidental double-tap zoom on controls */
+a,
+button,
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
 }
 
 /* Leave room for the sticky header when jumping to a section */

@@ -5,23 +5,23 @@ import { CalendarIcon, PinIcon } from "./ui";
 export function Hero() {
   return (
     <section id="top" className="pattern-maroon relative overflow-hidden text-white">
-      <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-10 sm:py-14 lg:grid-cols-[1.15fr_0.85fr] lg:gap-14 lg:py-16">
-        <div className="fade-up text-center lg:text-left">
+      <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 py-8 sm:py-12 md:grid-cols-[1.1fr_0.9fr] md:gap-8 lg:grid-cols-[1.15fr_0.85fr] lg:gap-14 lg:py-16">
+        <div className="fade-up text-center md:text-left">
           <p className="text-sm font-bold uppercase tracking-[0.3em] text-gold-light">
             ॐ Sri Satyanarayana Swamy Vratam ॐ
           </p>
-          <h1 className="mt-3 font-display text-4xl font-bold leading-[1.1] sm:text-5xl lg:text-6xl">
-            Samuhika <br className="hidden lg:block" />
+          <h1 className="mt-3 font-display text-[2rem] font-bold leading-[1.12] min-[400px]:text-4xl sm:text-5xl md:text-[2.6rem] lg:text-6xl">
+            Samuhika <br className="hidden md:block" />
             Satyanarayana Vratam{" "}
             <span className="text-gold-light">2026</span>
           </h1>
 
-          <ul className="mt-6 space-y-3 text-lg">
-            <li className="flex items-start justify-center gap-3 lg:justify-start">
+          <ul className="mt-5 space-y-3 text-base sm:mt-6 sm:text-lg">
+            <li className="flex items-start justify-center gap-3 md:justify-start">
               <CalendarIcon className="mt-1 h-5 w-5 shrink-0 text-gold-light" />
               <span className="font-semibold">{EVENT.dateLong}</span>
             </li>
-            <li className="flex items-start justify-center gap-3 text-left lg:justify-start">
+            <li className="flex items-start justify-center gap-3 text-left md:justify-start">
               <PinIcon className="mt-1 h-5 w-5 shrink-0 text-gold-light" />
               <span>
                 <span className="font-semibold">{EVENT.venueName}</span>, {EVENT.address}
@@ -29,16 +29,16 @@ export function Hero() {
             </li>
           </ul>
 
-          <div className="mt-8 flex flex-col items-stretch gap-3 sm:flex-row sm:justify-center lg:justify-start">
+          <div className="mt-6 flex flex-col items-stretch gap-3 sm:mt-8 sm:flex-row sm:justify-center md:justify-start">
             <a
               href="#tickets"
-              className="rounded-full bg-saffron px-8 py-3.5 text-center text-lg font-bold text-white shadow-lg shadow-black/30 transition hover:bg-saffron-dark"
+              className="rounded-full bg-saffron px-6 py-3.5 text-center text-lg font-bold sm:px-8 md:px-6 lg:px-8 text-white shadow-lg shadow-black/30 transition hover:bg-saffron-dark"
             >
               Register Now
             </a>
             <a
               href="#donate"
-              className="rounded-full border-2 border-gold-light px-8 py-3.5 text-center text-lg font-bold text-gold-light transition hover:bg-gold-light hover:text-maroon-dark"
+              className="rounded-full border-2 border-gold-light px-6 py-3.5 text-center text-lg font-bold sm:px-8 md:px-6 lg:px-8 text-gold-light transition hover:bg-gold-light hover:text-maroon-dark"
             >
               Donate
             </a>
@@ -49,7 +49,7 @@ export function Hero() {
           </p>
         </div>
 
-        <div className="fade-up mx-auto w-full max-w-sm [animation-delay:150ms] lg:max-w-md">
+        <div className="fade-up mx-auto w-full max-w-[17rem] [animation-delay:150ms] sm:max-w-xs md:max-w-none lg:max-w-md">
           <div className="rounded-[1.75rem] bg-gradient-to-b from-gold-light via-gold to-saffron p-1.5 shadow-2xl shadow-black/50">
             {/*
               The poster file has a ~41px white/grey frame baked in (artwork spans x 39-680, y 41-982

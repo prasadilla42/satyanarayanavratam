@@ -8,7 +8,7 @@ const points = [
 
 export function About() {
   return (
-    <section id="about" className="pattern-cream px-4 py-16 sm:py-20">
+    <section id="about" className="pattern-cream px-4 py-12 sm:py-20">
       <SectionHeading eyebrow="Om Namo Narayanaya" title="About the Vratam">
         Sri Satyanarayana Swamy Vratam is a cherished devotional observance dedicated to Lord Vishnu as
         Satyanarayana, the embodiment of truth. Performed together with family and community, it is observed

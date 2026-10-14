@@ -9,7 +9,7 @@ export function Header() {
   return (
     <header className="sticky top-0 z-40 border-b border-gold/30 bg-maroon-dark/95 text-white backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4">
-        <a href="#top" className="flex items-center gap-2 font-display text-lg font-bold">
+        <a href="#top" className="flex items-center gap-2 font-display text-base font-bold sm:text-lg">
           <span className="text-2xl text-gold-light" aria-hidden>ॐ</span>
           <span className="leading-tight">
             Satyanarayana Vratam <span className="text-gold-light">2026</span>
@@ -25,7 +25,7 @@ export function Header() {
             Register Now
           </a>
         </nav>
-        <a href="#donate" className="rounded-full border border-gold-light/60 px-4 py-1.5 text-sm font-semibold text-gold-light md:hidden">
+        <a href="#donate" className="rounded-full border border-gold-light/60 px-4 py-2 text-sm font-semibold text-gold-light md:hidden">
           Donate
         </a>
       </div>
