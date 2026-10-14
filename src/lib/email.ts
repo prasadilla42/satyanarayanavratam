@@ -108,12 +108,12 @@ function table(rows: string[]): string {
 
 function timingsHtml(): string {
   if (!EVENT.timings.length) return "To be confirmed – we will email you once finalised.";
-  return EVENT.timings.map((t) => `${esc(t.time)} – ${esc(t.label)}`).join("<br/>");
+  return EVENT.timings.map((t) => `${esc(t.time)} · ${esc(t.label)}`).join("<br/>");
 }
 
 function timingsText(): string {
   if (!EVENT.timings.length) return "To be confirmed – we will email you once finalised.";
-  return EVENT.timings.map((t) => `${t.time} – ${t.label}`).join("\n          ");
+  return EVENT.timings.map((t) => `${t.time} · ${t.label}`).join("\n          ");
 }
 
 function button(href: string, label: string): string {

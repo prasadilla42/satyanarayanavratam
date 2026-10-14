@@ -200,7 +200,7 @@ function BookingView({ booking: b }: { booking: Booking }) {
         <Row label="Timings">
           {EVENT.timings.length ? (
             EVENT.timings.map((t) => (
-              <span key={t.time} className="block">{t.time} – {t.label}</span>
+              <span key={t.time} className="block">{t.time} · {t.label}</span>
             ))
           ) : (
             <span className="font-normal text-ink/75">To be confirmed</span>

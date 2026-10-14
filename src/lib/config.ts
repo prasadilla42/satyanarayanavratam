@@ -20,7 +20,10 @@ export const EVENT = {
    * "To be confirmed". Example:
    *   [{ time: "9:00 AM", label: "Registration" }, { time: "10:00 AM", label: "Vratam begins" }]
    */
-  timings: [] as { time: string; label: string }[],
+  timings: [{ time: "9:30 AM – 3:00 PM", label: "Satyanarayana Vratam" }] as {
+    time: string;
+    label: string;
+  }[],
   /**
    * Organiser contact details (public). Set via env vars once supplied.
    */
