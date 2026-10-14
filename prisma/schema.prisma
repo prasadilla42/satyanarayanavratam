@@ -1,0 +1,84 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection string (used by the app at runtime)
+  url       = env("DATABASE_URL")
+  // Direct connection string (used by `prisma migrate`). Same value is fine for most hosts.
+  directUrl = env("DIRECT_URL")
+}
+
+enum BookingStatus {
+  PENDING       // Seats are held while the visitor completes Stripe Checkout
+  CONFIRMED     // Paid (or free) and confirmed
+  EXPIRED       // Checkout abandoned / expired, seats released
+  CANCELLED     // Cancelled by the organiser or failed to start checkout
+  NEEDS_REFUND  // Payment arrived after seats were released and no seats are left
+}
+
+enum DonationStatus {
+  PENDING
+  PAID
+  EXPIRED
+}
+
+model Booking {
+  id              String        @id @default(cuid())
+  /// Public booking reference, e.g. SSV26-7K3QX9
+  reference       String        @unique
+  /// Random secret used in the confirmation link (so references alone cannot be used to view details)
+  accessToken     String        @unique
+  status          BookingStatus @default(PENDING)
+
+  name            String
+  email           String
+  phone           String
+  /// Normalised keys used to detect duplicate bookings
+  emailKey        String
+  phoneKey        String
+  gothram         String?
+  notes           String?
+
+  yajamaniQty     Int           @default(0)
+  generalQty      Int           @default(0)
+  /// Amount payable in pence (Yajamani qty x price). 0 for free bookings.
+  amountPence     Int           @default(0)
+
+  stripeSessionId String?       @unique
+  paymentIntentId String?
+  paidAt          DateTime?
+  /// When a PENDING booking stops holding seats
+  expiresAt       DateTime?
+  emailSentAt     DateTime?
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([status, expiresAt])
+  @@index([emailKey])
+  @@index([phoneKey])
+}
+
+model Donation {
+  id              String         @id @default(cuid())
+  reference       String         @unique
+  accessToken     String         @unique
+  status          DonationStatus @default(PENDING)
+
+  name            String
+  email           String
+  message         String?
+  amountPence     Int
+
+  stripeSessionId String?        @unique
+  paymentIntentId String?
+  paidAt          DateTime?
+  emailSentAt     DateTime?
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([status])
+}
