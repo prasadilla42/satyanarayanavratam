@@ -4,7 +4,7 @@
  */
 
 export const EVENT = {
-  name: "Samuhika Satyanarayana Vratam 2026",
+  name: "Rugby Samuhika Satyanarayana Vratam 2026",
   shortName: "Satyanarayana Vratam",
   /** ISO date, used for structured data */
   isoDate: "2026-11-15",
