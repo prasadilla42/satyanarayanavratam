@@ -11,7 +11,7 @@ export function Hero() {
             ॐ Sri Satyanarayana Swamy Vratam ॐ
           </p>
           <h1 className="mt-3 font-display text-[2rem] font-bold leading-[1.12] min-[400px]:text-4xl sm:text-5xl md:text-[2.6rem] lg:text-6xl">
-            Samuhika <br className="hidden md:block" />
+            Rugby Samuhika <br className="hidden md:block" />
             Satyanarayana Vratam{" "}
             <span className="text-gold-light">2026</span>
           </h1>
