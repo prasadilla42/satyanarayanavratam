@@ -16,6 +16,7 @@ import {
   checkoutAmountPence,
   checkoutTransactionId,
   createHostedCheckout,
+  deactivateCheckout,
   getCheckout,
   sumupMerchantCode,
   type SumUpCheckout,
@@ -65,20 +66,35 @@ async function countHeld(tx: Tx | typeof db, excludeId?: string) {
   };
 }
 
-function toAvailability(held: { yajamani: number; general: number }): Availability {
+export interface Capacities {
+  yajamani: number;
+  general: number;
+}
+
+/** Ticket limits. Editable by the organiser in /admin; falls back to the defaults in config.ts. */
+export async function getCapacities(tx: Tx | typeof db = db): Promise<Capacities> {
+  const s = await tx.eventSettings.findUnique({ where: { id: 1 } });
+  return {
+    yajamani: s?.yajamaniCapacity ?? TICKETS.yajamani.capacity,
+    general: s?.generalCapacity ?? TICKETS.general.capacity,
+  };
+}
+
+function toAvailability(held: { yajamani: number; general: number }, caps: Capacities): Availability {
   const slot = (capacity: number, taken: number): Slot => ({
     capacity,
     taken,
     remaining: Math.max(0, capacity - taken),
   });
   return {
-    yajamani: slot(TICKETS.yajamani.capacity, held.yajamani),
-    general: slot(TICKETS.general.capacity, held.general),
+    yajamani: slot(caps.yajamani, held.yajamani),
+    general: slot(caps.general, held.general),
   };
 }
 
 export async function getAvailability(): Promise<Availability> {
-  return toAvailability(await countHeld(db));
+  const [held, caps] = await Promise.all([countHeld(db), getCapacities(db)]);
+  return toAvailability(held, caps);
 }
 
 /* ------------------------------------------------------------------ */
@@ -131,20 +147,21 @@ export async function createBooking(input: BookingInput): Promise<CreateBookingR
 
       // 2. Capacity check
       const held = await countHeld(tx);
-      if (input.yajamaniQty > 0 && held.yajamani + input.yajamaniQty > TICKETS.yajamani.capacity) {
+      const caps = await getCapacities(tx);
+      if (input.yajamaniQty > 0 && held.yajamani + input.yajamaniQty > caps.yajamani) {
         return {
           ok: false,
           code: "SOLD_OUT",
           field: "yajamaniQty",
-          availability: toAvailability(held),
+          availability: toAvailability(held, caps),
         };
       }
-      if (input.generalQty > 0 && held.general + input.generalQty > TICKETS.general.capacity) {
+      if (input.generalQty > 0 && held.general + input.generalQty > caps.general) {
         return {
           ok: false,
           code: "SOLD_OUT",
           field: "generalQty",
-          availability: toAvailability(held),
+          availability: toAvailability(held, caps),
         };
       }
 
@@ -282,9 +299,10 @@ export async function confirmPaidBooking(checkout: SumUpCheckout): Promise<Booki
           current.status !== "PENDING" || (current.expiresAt && current.expiresAt < new Date());
         if (holdLapsed) {
           const held = await countHeld(tx, current.id);
+          const caps = await getCapacities(tx);
           const full =
-            held.yajamani + current.yajamaniQty > TICKETS.yajamani.capacity ||
-            held.general + current.generalQty > TICKETS.general.capacity;
+            held.yajamani + current.yajamaniQty > caps.yajamani ||
+            held.general + current.generalQty > caps.general;
           if (full) {
             return tx.booking.update({
               where: { id: current.id },
@@ -448,4 +466,86 @@ export async function confirmPaidDonation(checkout: SumUpCheckout): Promise<Dona
   }
   await sendDonationEmail(current.id);
   return current;
+}
+
+/* ------------------------------------------------------------------ */
+/* Admin actions (only reachable from /admin, which is password protected) */
+/* ------------------------------------------------------------------ */
+
+export const MAX_CAPACITY = 5000;
+
+export type AdminResult = { ok: boolean; message: string };
+
+/** Changes the ticket limits. A limit can't go below the seats already confirmed or held. */
+export async function setCapacities(yajamani: number, general: number): Promise<AdminResult> {
+  const valid = (n: number) => Number.isInteger(n) && n >= 0 && n <= MAX_CAPACITY;
+  if (!valid(yajamani) || !valid(general)) {
+    return { ok: false, message: `Enter whole numbers between 0 and ${MAX_CAPACITY}.` };
+  }
+  return db.$transaction(
+    async (tx): Promise<AdminResult> => {
+      await lockSeats(tx);
+      const held = await countHeld(tx);
+      if (yajamani < held.yajamani) {
+        return {
+          ok: false,
+          message: `${held.yajamani} Yajamani seats are already booked or held, so the limit can't be below ${held.yajamani}. Cancel some bookings first.`,
+        };
+      }
+      if (general < held.general) {
+        return {
+          ok: false,
+          message: `${held.general} General seats are already booked or held, so the limit can't be below ${held.general}. Cancel some bookings first.`,
+        };
+      }
+      await tx.eventSettings.upsert({
+        where: { id: 1 },
+        create: { id: 1, yajamaniCapacity: yajamani, generalCapacity: general },
+        update: { yajamaniCapacity: yajamani, generalCapacity: general },
+      });
+      return { ok: true, message: `Saved: ${yajamani} Yajamani and ${general} General tickets.` };
+    },
+    { maxWait: 10_000, timeout: 20_000 },
+  );
+}
+
+/**
+ * Cancels a booking: frees its seats and its email address / phone number straight away.
+ * The record stays in the list as CANCELLED. This does not refund any payment.
+ */
+export async function adminCancelBooking(id: string) {
+  const booking = await db.$transaction(
+    async (tx) => {
+      await lockSeats(tx);
+      const current = await tx.booking.findUnique({ where: { id } });
+      if (!current || current.status === "CANCELLED") return null;
+      return tx.booking.update({ where: { id }, data: { status: "CANCELLED", expiresAt: null } });
+    },
+    { maxWait: 10_000, timeout: 20_000 },
+  );
+  // Make sure an unpaid checkout can't be paid after the booking was removed.
+  if (booking?.sumupCheckoutId && booking.paidAt === null) await deactivateCheckout(booking.sumupCheckoutId);
+}
+
+/** Permanently deletes a booking record (frees seats, email and phone). Does not refund. */
+export async function adminDeleteBooking(id: string) {
+  const booking = await db.$transaction(
+    async (tx) => {
+      await lockSeats(tx);
+      const current = await tx.booking.findUnique({ where: { id } });
+      if (!current) return null;
+      await tx.booking.delete({ where: { id } });
+      return current;
+    },
+    { maxWait: 10_000, timeout: 20_000 },
+  );
+  if (booking?.sumupCheckoutId && booking.paidAt === null) await deactivateCheckout(booking.sumupCheckoutId);
+}
+
+/** Permanently deletes a donation record. Does not refund. */
+export async function adminDeleteDonation(id: string) {
+  const donation = await db.donation.findUnique({ where: { id } });
+  if (!donation) return;
+  await db.donation.delete({ where: { id } });
+  if (donation.sumupCheckoutId && donation.paidAt === null) await deactivateCheckout(donation.sumupCheckoutId);
 }

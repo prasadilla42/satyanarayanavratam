@@ -4,7 +4,14 @@ import { Suspense } from "react";
 import { db } from "@/lib/db";
 import { getAvailability } from "@/lib/bookings";
 import { formatGBP } from "@/lib/config";
-import { resendBookingEmailAction, resendDonationEmailAction } from "./actions";
+import {
+  cancelBookingAction,
+  deleteBookingAction,
+  deleteDonationAction,
+  resendBookingEmailAction,
+  resendDonationEmailAction,
+} from "./actions";
+import { CapacityForm, ConfirmButton } from "./AdminControls";
 
 export const metadata: Metadata = {
   title: "Admin – Satyanarayana Vratam 2026",
@@ -67,6 +74,8 @@ async function Dashboard() {
         Seat counts include unpaid bookings that are still holding seats during checkout.
       </p>
 
+      <CapacityForm yajamani={availability.yajamani.capacity} general={availability.general.capacity} />
+
       {needsRefund.length > 0 && (
         <div className="mt-6 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900">
           <strong>Action needed:</strong> {needsRefund.length} booking(s) were paid after the seats were released
@@ -83,12 +92,13 @@ async function Dashboard() {
           </a>
         </div>
         <div className="mt-3 overflow-x-auto rounded-lg border border-stone-200 bg-white">
-          <table className="w-full min-w-[900px] text-left text-sm">
+          <table className="w-full min-w-[1000px] text-left text-sm">
             <thead className="bg-cream-dark text-xs uppercase tracking-wide text-stone-600">
               <tr>
                 <th className="p-3">Reference</th><th className="p-3">Status</th><th className="p-3">Name</th>
                 <th className="p-3">Contact</th><th className="p-3">Yajamani</th><th className="p-3">General</th>
                 <th className="p-3">Paid</th><th className="p-3">Created</th><th className="p-3">Email</th>
+                <th className="p-3">Remove</th>
               </tr>
             </thead>
             <tbody>
@@ -119,10 +129,34 @@ async function Dashboard() {
                       "–"
                     )}
                   </td>
+                  <td className="p-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {["PENDING", "CONFIRMED", "NEEDS_REFUND"].includes(b.status) && (
+                        <form action={cancelBookingAction}>
+                          <input type="hidden" name="id" value={b.id} />
+                          <ConfirmButton
+                            className="rounded border border-amber-700 px-2 py-0.5 text-xs text-amber-800 hover:bg-amber-700 hover:text-white"
+                            message={`Cancel booking ${b.reference} (${b.name})?\n\nTheir ${b.yajamaniQty + b.generalQty} ticket(s) will be released and their email and phone can book again. The record stays in the list as CANCELLED.${b.paidAt ? "\n\nThis does NOT refund the payment - refund it in your SumUp dashboard." : ""}`}
+                          >
+                            Cancel
+                          </ConfirmButton>
+                        </form>
+                      )}
+                      <form action={deleteBookingAction}>
+                        <input type="hidden" name="id" value={b.id} />
+                        <ConfirmButton
+                          className="rounded border border-red-700 px-2 py-0.5 text-xs text-red-800 hover:bg-red-700 hover:text-white"
+                          message={`PERMANENTLY DELETE booking ${b.reference} (${b.name})?\n\nThe record is erased and cannot be recovered. Its tickets, email and phone are freed.${b.paidAt ? "\n\nThis does NOT refund the payment - refund it in your SumUp dashboard." : ""}`}
+                        >
+                          Delete
+                        </ConfirmButton>
+                      </form>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {bookings.length === 0 && (
-                <tr><td colSpan={9} className="p-6 text-center text-stone-500">No bookings yet.</td></tr>
+                <tr><td colSpan={10} className="p-6 text-center text-stone-500">No bookings yet.</td></tr>
               )}
             </tbody>
           </table>
@@ -137,12 +171,12 @@ async function Dashboard() {
           </a>
         </div>
         <div className="mt-3 overflow-x-auto rounded-lg border border-stone-200 bg-white">
-          <table className="w-full min-w-[700px] text-left text-sm">
+          <table className="w-full min-w-[780px] text-left text-sm">
             <thead className="bg-cream-dark text-xs uppercase tracking-wide text-stone-600">
               <tr>
                 <th className="p-3">Reference</th><th className="p-3">Status</th><th className="p-3">Name</th>
                 <th className="p-3">Email</th><th className="p-3">Amount</th><th className="p-3">Created</th>
-                <th className="p-3">Receipt</th>
+                <th className="p-3">Receipt</th><th className="p-3">Remove</th>
               </tr>
             </thead>
             <tbody>
@@ -167,10 +201,21 @@ async function Dashboard() {
                       "–"
                     )}
                   </td>
+                  <td className="p-3">
+                    <form action={deleteDonationAction}>
+                      <input type="hidden" name="id" value={d.id} />
+                      <ConfirmButton
+                        className="rounded border border-red-700 px-2 py-0.5 text-xs text-red-800 hover:bg-red-700 hover:text-white"
+                        message={`PERMANENTLY DELETE donation ${d.reference} (${d.name}, ${formatGBP(d.amountPence)})?\n\nThe record is erased and cannot be recovered.${d.status === "PAID" ? "\n\nThis does NOT refund the payment - refund it in your SumUp dashboard." : ""}`}
+                      >
+                        Delete
+                      </ConfirmButton>
+                    </form>
+                  </td>
                 </tr>
               ))}
               {donations.length === 0 && (
-                <tr><td colSpan={7} className="p-6 text-center text-stone-500">No donations yet.</td></tr>
+                <tr><td colSpan={8} className="p-6 text-center text-stone-500">No donations yet.</td></tr>
               )}
             </tbody>
           </table>

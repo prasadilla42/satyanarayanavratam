@@ -83,3 +83,11 @@ model Donation {
 
   @@index([status])
 }
+
+/// Single row (id = 1): ticket limits the organiser can change from /admin.
+model EventSettings {
+  id               Int      @id @default(1)
+  yajamaniCapacity Int
+  generalCapacity  Int
+  updatedAt        DateTime @updatedAt
+}

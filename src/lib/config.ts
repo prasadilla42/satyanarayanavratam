@@ -40,7 +40,7 @@ export const TICKETS = {
   yajamani: {
     key: "yajamani" as const,
     name: "Yajamani Ticket",
-    description: "Take part in the Vratam as a Yajamani. Limited to 50 tickets.",
+    description: "Take part in the Vratam as a Yajamani. Limited places.",
     pricePence: 5100, // £51
     capacity: 50,
   },
