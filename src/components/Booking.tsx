@@ -229,7 +229,7 @@ export function Booking() {
       const data = await res.json().catch(() => ({}));
 
       if (res.ok && data.ok && data.url) {
-        window.location.assign(data.url); // Stripe Checkout (paid) or confirmation screen (free)
+        window.location.assign(data.url); // SumUp Checkout (paid) or confirmation screen (free)
         return; // keep the button disabled while navigating
       }
       if (data.code === "VALIDATION") setErrors(data.errors ?? {});
@@ -371,7 +371,7 @@ export function Booking() {
 
             <p className="mt-3 text-center text-xs text-ink/60">
               {total > 0
-                ? "You'll be redirected to Stripe's secure checkout. We never see your card details."
+                ? "You'll be redirected to SumUp's secure checkout. We never see your card details."
                 : "No payment needed. Your confirmation is shown instantly and emailed to you."}
             </p>
             <p className="mt-2 text-center text-xs text-ink/60">

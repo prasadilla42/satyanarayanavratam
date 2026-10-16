@@ -9,7 +9,7 @@ datasource db {
 }
 
 enum BookingStatus {
-  PENDING       // Seats are held while the visitor completes Stripe Checkout
+  PENDING       // Seats are held while the visitor completes SumUp Checkout
   CONFIRMED     // Paid (or free) and confirmed
   EXPIRED       // Checkout abandoned / expired, seats released
   CANCELLED     // Cancelled by the organiser or failed to start checkout
@@ -44,8 +44,10 @@ model Booking {
   /// Amount payable in pence (Yajamani qty x price). 0 for free bookings.
   amountPence     Int           @default(0)
 
-  stripeSessionId String?       @unique
-  paymentIntentId String?
+  /// SumUp checkout id, its hosted payment page URL and the resulting transaction code
+  sumupCheckoutId    String?    @unique
+  sumupCheckoutUrl   String?
+  sumupTransactionId String?
   paidAt          DateTime?
   /// When a PENDING booking stops holding seats
   expiresAt       DateTime?
@@ -70,8 +72,9 @@ model Donation {
   message         String?
   amountPence     Int
 
-  stripeSessionId String?        @unique
-  paymentIntentId String?
+  sumupCheckoutId    String?     @unique
+  sumupCheckoutUrl   String?
+  sumupTransactionId String?
   paidAt          DateTime?
   emailSentAt     DateTime?
 

@@ -1,9 +1,9 @@
 # Samuhika Satyanarayana Vratam 2026
 
 Single-page event site: event info, ticket booking, donations and venue details on one page.
-Stripe Checkout opens only when payment is needed; free registrations are confirmed instantly.
+SumUp Hosted Checkout opens only when payment is needed; free registrations are confirmed instantly.
 
-**Stack:** Next.js (App Router) · TypeScript · Tailwind CSS · Stripe Checkout · PostgreSQL + Prisma · Gmail (Nodemailer) · Vercel
+**Stack:** Next.js (App Router) · TypeScript · Tailwind CSS · SumUp Hosted Checkout · PostgreSQL + Prisma · Gmail (Nodemailer) · Vercel
 
 ## How it works
 
@@ -12,14 +12,14 @@ Stripe Checkout opens only when payment is needed; free registrations are confir
 | Yajamani ticket | £51 each, any quantity per booking (max 20), **50 in total** |
 | General ticket | Free, any quantity per booking (max 20), **300 in total** |
 | Duplicates | One active booking per email address **or** phone number (see below) |
-| Paid booking | Seats are held for ~35 min → Stripe Checkout → webhook verifies payment → confirmed + email |
+| Paid booking | Seats are held for ~35 min → SumUp payment page → SumUp calls us, we verify the payment with SumUp → confirmed + email |
 | Free booking | Confirmed immediately → confirmation screen + email |
-| Donations | £5 / £11 / £21 / £51 / £101 or custom amount → Stripe Checkout → receipt email |
+| Donations | £5 / £11 / £21 / £51 / £101 or custom amount → SumUp payment page → receipt email |
 | Admin | `/admin` (HTTP Basic Auth): bookings, donations, seat counts, CSV export, resend email |
 
 **Limits can't be oversold.** Every seat change runs under a Postgres advisory lock, so two people
 clicking at the same moment can't take the last seat. Unpaid seats are held while the visitor is on the
-Stripe page and released automatically if checkout is abandoned or expires.
+SumUp page and released automatically if checkout is abandoned or expires.
 
 **Duplicate protection.** A booking is rejected if its email *or* phone number matches an existing
 confirmed (or currently-held) booking. Emails are normalised (case, `+tags`, and Gmail dots /
@@ -49,19 +49,30 @@ npm run db:deploy
 
 `DIRECT_URL` is optional (a non-pooled URL used only for migrations). `DATABASE_URL` is used if it isn't set.
 
-### 3. Stripe
+### 3. SumUp (card payments)
 
-1. Create a [Stripe](https://dashboard.stripe.com) account. Copy the **secret key** into `STRIPE_SECRET_KEY` (use test keys first).
-2. Add a webhook endpoint: **Developers → Webhooks → Add endpoint**
-   * URL: `https://YOUR-DOMAIN/api/webhooks/stripe`
-   * Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.expired`
-   * Copy its **signing secret** into `STRIPE_WEBHOOK_SECRET`.
-3. Local testing with the Stripe CLI:
-   ```bash
-   stripe listen --forward-to localhost:3000/api/webhooks/stripe
-   ```
-   Use the `whsec_...` it prints as `STRIPE_WEBHOOK_SECRET`. Test card: `4242 4242 4242 4242`.
+Payments use [SumUp Hosted Checkout](https://developer.sumup.com/online-payments/checkouts/hosted-checkout/):
+the site creates a checkout through SumUp's API and sends the visitor to SumUp's payment page
+(cards, Apple Pay, Google Pay). SumUp then calls `https://YOUR-DOMAIN/api/webhooks/sumup`; that call is
+not signed, so the site never trusts it – it asks SumUp's API whether the checkout really is `PAID`
+and checks the reference, amount (£, GBP) and merchant before confirming anything.
 
+There is **no webhook to set up in the SumUp dashboard**: the callback address is sent with every checkout.
+You only need two values:
+
+1. **`SUMUP_API_KEY`** – sign in at <https://me.sumup.com> → your profile → **Settings → For Developers →
+   Toolkit → API Keys → Create**. Name it (e.g. "Vratam website") and copy the key straight away
+   (it starts with `sup_sk_`; SumUp never shows it again). Do **not** use the "Public Key".
+2. **`SUMUP_MERCHANT_CODE`** – the short code of the merchant account that receives the money
+   (e.g. `MCXXXXXX`), shown next to your name / in the business drop-down at the top-left of the SumUp dashboard.
+
+Use a **sandbox merchant account** first (<https://me.sumup.com/settings/developer?tab=sandboxes>): create
+the API key and read the merchant code *while signed in to the sandbox account*. Sandbox test card:
+`4200 0000 0000 0091`, any future expiry, any 3-digit CVV. (An amount of exactly £11 always fails in the
+sandbox, by design.) Switch to the live account's key + code before going public.
+
+Local testing without a SumUp account: `.env` points `SUMUP_API_BASE` at a fake SumUp server started by
+`npm run test:paid`. Remove `SUMUP_API_BASE` when using real SumUp keys.
 ### 4. Gmail confirmation emails
 
 Emails are sent from your Gmail account over SMTP using an **App Password** (not your normal password):
@@ -86,7 +97,7 @@ npm run dev          # http://localhost:3000
 2. Add every variable from `.env.example` in **Project → Settings → Environment Variables**
    (set `NEXT_PUBLIC_SITE_URL` to your real domain).
 3. Deploy. The `vercel-build` script applies database migrations automatically.
-4. Add the Stripe webhook for the production URL (step 3.2) and switch to **live** Stripe keys when ready.
+4. Use your **live** SumUp API key and merchant code when ready. `NEXT_PUBLIC_SITE_URL` must be your public https domain, because SumUp has to reach `/api/webhooks/sumup` and send customers back to `/confirmation`.
 
 ## Things you'll want to edit
 
@@ -109,11 +120,11 @@ With the dev server running against a **throw-away** database:
 
 ```bash
 npm run test:smoke   # validation, free booking, duplicates, concurrency, capacity
-npm run test:paid    # signed fake Stripe webhooks: confirm, replay, tampering, expiry, 50-seat limit
+npm run test:paid    # fake SumUp server: checkout, callback, tampering, resume, expiry, donations, 50-seat limit
 npm run test:admin   # admin area locked down
 ```
 
-(`test:paid` needs `STRIPE_SECRET_KEY=sk_test_dummy` and `STRIPE_WEBHOOK_SECRET=whsec_localtest` in `.env`.)
+(`test:paid` needs `SUMUP_API_KEY="sup_sk_dummy_local"`, `SUMUP_MERCHANT_CODE="MCLOCAL1"` and `SUMUP_API_BASE="http://127.0.0.1:4010"` in `.env`.)
 
 ## Project layout
 
@@ -122,8 +133,9 @@ prisma/schema.prisma          Booking + Donation models
 src/app/page.tsx              The single public page
 src/app/confirmation/         Confirmation screen (booking / donation reference)
 src/app/admin/                Protected dashboard
-src/app/api/                  bookings, donations, availability, Stripe webhook, CSV export
-src/lib/bookings.ts           Capacity, duplicate rules, Stripe sessions, payment verification
+src/app/api/                  bookings, donations, availability, SumUp callback, CSV export
+src/lib/bookings.ts           Capacity, duplicate rules, SumUp checkouts, payment verification
+src/lib/sumup.ts              SumUp Checkouts API client
 src/lib/email.ts              Gmail sender + email templates
 src/proxy.ts                  Basic-auth protection for /admin
 ```

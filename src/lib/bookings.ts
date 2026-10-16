@@ -1,5 +1,4 @@
 import { Prisma, type Booking, type Donation } from "@prisma/client";
-import type Stripe from "stripe";
 import { db } from "./db";
 import {
   BOOKING_REF_PREFIX,
@@ -13,7 +12,14 @@ import {
 } from "./config";
 import { sendBookingConfirmationEmail, sendDonationReceiptEmail } from "./email";
 import { emailKey, generateAccessToken, generateReference, phoneKey } from "./normalize";
-import { stripe } from "./stripe";
+import {
+  checkoutAmountPence,
+  checkoutTransactionId,
+  createHostedCheckout,
+  getCheckout,
+  sumupMerchantCode,
+  type SumUpCheckout,
+} from "./sumup";
 import type { BookingInput, DonationInput } from "./validation";
 
 type Tx = Prisma.TransactionClient;
@@ -84,7 +90,7 @@ export type CreateBookingResult =
   | {
       ok: false;
       code: "DUPLICATE";
-      /** An unpaid booking by the same person that can be resumed on Stripe */
+      /** An unpaid booking by the same person that can be resumed on SumUp */
       resumable: Booking | null;
     }
   | {
@@ -175,42 +181,32 @@ export async function createBooking(input: BookingInput): Promise<CreateBookingR
   );
 }
 
-/** Creates the Stripe Checkout session for a PENDING booking and stores its id. */
+/** Public https address SumUp calls when a checkout changes status. Omitted on localhost (SumUp can't reach it). */
+function callbackUrl(): string | undefined {
+  const base = siteUrl();
+  return base.startsWith("https://") ? `${base}/api/webhooks/sumup` : undefined;
+}
+
+const confirmationUrl = (reference: string, token: string) =>
+  `${siteUrl()}/confirmation?ref=${encodeURIComponent(reference)}&token=${encodeURIComponent(token)}`;
+
+/** Creates the SumUp Hosted Checkout for a PENDING booking and returns the payment page URL. */
 export async function startBookingCheckout(booking: Booking): Promise<string> {
   try {
-    const expiresAt = Math.floor(Date.now() / 1000) + CHECKOUT_HOLD_MINUTES * 60;
-    const session = await stripe().checkout.sessions.create({
-      mode: "payment",
-      customer_email: booking.email,
-      client_reference_id: booking.reference,
-      line_items: [
-        {
-          quantity: booking.yajamaniQty,
-          price_data: {
-            currency: CURRENCY,
-            unit_amount: TICKETS.yajamani.pricePence,
-            product_data: {
-              name: `${TICKETS.yajamani.name} – ${EVENT.name}`,
-              description: `${EVENT.dateLong}, ${EVENT.venueName}`,
-            },
-          },
-        },
-      ],
-      metadata: { kind: "booking", bookingId: booking.id, reference: booking.reference },
-      payment_intent_data: {
-        description: `${EVENT.name} – booking ${booking.reference}`,
-        metadata: { kind: "booking", bookingId: booking.id, reference: booking.reference },
-      },
-      expires_at: expiresAt,
-      success_url: `${siteUrl()}/confirmation?ref=${encodeURIComponent(booking.reference)}&token=${encodeURIComponent(booking.accessToken)}`,
-      cancel_url: `${siteUrl()}/?checkout=cancelled#tickets`,
+    const checkout = await createHostedCheckout({
+      reference: booking.reference,
+      amountPence: booking.amountPence,
+      currency: CURRENCY,
+      description: `${EVENT.name} – ${booking.yajamaniQty} × ${TICKETS.yajamani.name} (${booking.reference})`.slice(0, 250),
+      redirectUrl: confirmationUrl(booking.reference, booking.accessToken),
+      callbackUrl: callbackUrl(),
+      validUntil: new Date(Date.now() + CHECKOUT_HOLD_MINUTES * 60_000),
     });
-    if (!session.url) throw new Error("Stripe did not return a checkout URL");
     await db.booking.update({
       where: { id: booking.id },
-      data: { stripeSessionId: session.id },
+      data: { sumupCheckoutId: checkout.id, sumupCheckoutUrl: checkout.hosted_checkout_url },
     });
-    return session.url;
+    return checkout.hosted_checkout_url!;
   } catch (err) {
     // Release the seats straight away
     await db.booking
@@ -220,46 +216,60 @@ export async function startBookingCheckout(booking: Booking): Promise<string> {
   }
 }
 
-/** If the visitor already has an unpaid checkout open, returns its Stripe URL. */
+/** If the visitor already has an unpaid checkout open, returns its SumUp payment page URL. */
 export async function resumeCheckoutUrl(booking: Booking): Promise<string | null> {
-  if (!booking.stripeSessionId) return null;
+  if (!booking.sumupCheckoutId || !booking.sumupCheckoutUrl) return null;
   try {
-    const session = await stripe().checkout.sessions.retrieve(booking.stripeSessionId);
-    return session.status === "open" && session.url ? session.url : null;
+    const checkout = await getCheckout(booking.sumupCheckoutId);
+    // FAILED means the last card attempt failed; SumUp lets the customer try again on the same page.
+    const usable = checkout.status === "PENDING" || checkout.status === "FAILED";
+    const notExpired = !checkout.valid_until || new Date(checkout.valid_until).getTime() > Date.now();
+    return usable && notExpired ? booking.sumupCheckoutUrl : null;
   } catch {
     return null;
   }
 }
-
 /* ------------------------------------------------------------------ */
-/* Payment verification (webhook + confirmation page fallback)         */
+/* Payment verification (SumUp callback + confirmation page fallback)  */
 /* ------------------------------------------------------------------ */
-
-const paymentIntentId = (s: Stripe.Checkout.Session) =>
-  typeof s.payment_intent === "string" ? s.payment_intent : (s.payment_intent?.id ?? null);
 
 /**
- * Marks a booking as CONFIRMED once Stripe reports the Checkout Session as paid.
- * Safe to call many times (webhook retries, confirmation-page refreshes).
+ * SumUp's status callback is NOT signed, so we never trust it. Every payment is verified by
+ * fetching the checkout from SumUp's API and checking reference, amount, currency and merchant.
+ * Returns a description of the problem, or null if everything matches.
  */
-export async function confirmPaidBooking(session: Stripe.Checkout.Session): Promise<Booking | null> {
-  if (session.payment_status !== "paid") return null;
+function checkoutMismatch(checkout: SumUpCheckout, expectedPence: number, reference: string): string | null {
+  if (checkout.checkout_reference !== reference) {
+    return `reference is ${checkout.checkout_reference}, expected ${reference}`;
+  }
+  if (checkoutAmountPence(checkout) !== expectedPence || checkout.currency?.toUpperCase() !== CURRENCY.toUpperCase()) {
+    return `paid ${checkout.amount} ${checkout.currency}, expected ${expectedPence} pence`;
+  }
+  if (checkout.merchant_code?.toUpperCase() !== sumupMerchantCode()) {
+    return `merchant ${checkout.merchant_code} is not ours`;
+  }
+  return null;
+}
 
-  const bookingId = session.metadata?.bookingId;
-  const booking = await db.booking.findFirst({
-    where: { OR: [{ stripeSessionId: session.id }, ...(bookingId ? [{ id: bookingId }] : [])] },
-  });
+/**
+ * Marks a booking as CONFIRMED once SumUp reports its checkout as PAID.
+ * Safe to call many times (callback retries, confirmation-page refreshes).
+ */
+export async function confirmPaidBooking(checkout: SumUpCheckout): Promise<Booking | null> {
+  if (checkout.status !== "PAID") return null;
+
+  const booking = await db.booking.findUnique({ where: { sumupCheckoutId: checkout.id } });
   if (!booking) {
-    console.error(`[stripe] Paid session ${session.id} has no matching booking`);
+    console.error(`[sumup] Paid checkout ${checkout.id} has no matching booking`);
     return null;
   }
 
-  if (session.amount_total !== booking.amountPence || session.currency !== CURRENCY) {
-    console.error(
-      `[stripe] Amount mismatch for ${booking.reference}: paid ${session.amount_total} ${session.currency}, expected ${booking.amountPence}`,
-    );
+  const mismatch = checkoutMismatch(checkout, booking.amountPence, booking.reference);
+  if (mismatch) {
+    console.error(`[sumup] Checkout mismatch for ${booking.reference}: ${mismatch}`);
     return booking;
   }
+  const transactionId = checkoutTransactionId(checkout);
 
   if (booking.status !== "CONFIRMED") {
     const updated = await db.$transaction(
@@ -278,28 +288,19 @@ export async function confirmPaidBooking(session: Stripe.Checkout.Session): Prom
           if (full) {
             return tx.booking.update({
               where: { id: current.id },
-              data: {
-                status: "NEEDS_REFUND",
-                paidAt: new Date(),
-                paymentIntentId: paymentIntentId(session),
-              },
+              data: { status: "NEEDS_REFUND", paidAt: new Date(), sumupTransactionId: transactionId },
             });
           }
         }
         return tx.booking.update({
           where: { id: current.id },
-          data: {
-            status: "CONFIRMED",
-            paidAt: new Date(),
-            paymentIntentId: paymentIntentId(session),
-            expiresAt: null,
-          },
+          data: { status: "CONFIRMED", paidAt: new Date(), sumupTransactionId: transactionId, expiresAt: null },
         });
       },
       { maxWait: 10_000, timeout: 20_000 },
     );
     if (updated.status === "NEEDS_REFUND") {
-      console.error(`[stripe] ${updated.reference} was paid after seats were released – refund required`);
+      console.error(`[sumup] ${updated.reference} was paid after seats were released – refund required`);
       return updated;
     }
     await sendBookingEmail(updated.id);
@@ -310,15 +311,39 @@ export async function confirmPaidBooking(session: Stripe.Checkout.Session): Prom
   return booking;
 }
 
-export async function expireBookingSession(sessionId: string) {
+/** Releases the seats of an unpaid booking / donation whose SumUp checkout has expired. */
+export async function expireCheckout(checkoutId: string) {
   await db.booking.updateMany({
-    where: { stripeSessionId: sessionId, status: "PENDING" },
+    where: { sumupCheckoutId: checkoutId, status: "PENDING" },
     data: { status: "EXPIRED" },
   });
   await db.donation.updateMany({
-    where: { stripeSessionId: sessionId, status: "PENDING" },
+    where: { sumupCheckoutId: checkoutId, status: "PENDING" },
     data: { status: "EXPIRED" },
   });
+}
+
+/**
+ * Looks the checkout up at SumUp (the only source of truth) and updates our booking or donation.
+ * Used by the SumUp callback and by the confirmation page. Ids we did not create are ignored
+ * without calling SumUp.
+ */
+export async function settleCheckout(checkoutId: string): Promise<"booking" | "donation" | null> {
+  const [booking, donation] = await Promise.all([
+    db.booking.findUnique({ where: { sumupCheckoutId: checkoutId }, select: { id: true } }),
+    db.donation.findUnique({ where: { sumupCheckoutId: checkoutId }, select: { id: true } }),
+  ]);
+  if (!booking && !donation) return null;
+
+  const checkout = await getCheckout(checkoutId);
+  if (checkout.status === "PAID") {
+    if (booking) await confirmPaidBooking(checkout);
+    else await confirmPaidDonation(checkout);
+  } else if (checkout.status === "EXPIRED") {
+    await expireCheckout(checkoutId);
+  }
+  // PENDING / FAILED: the customer may still retry on SumUp's page, so leave it as is.
+  return booking ? "booking" : "donation";
 }
 
 /* ------------------------------------------------------------------ */
@@ -382,60 +407,43 @@ export async function createDonationCheckout(input: DonationInput): Promise<stri
   });
 
   try {
-    const session = await stripe().checkout.sessions.create({
-      mode: "payment",
-      customer_email: donation.email,
-      client_reference_id: donation.reference,
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: CURRENCY,
-            unit_amount: donation.amountPence,
-            product_data: {
-              name: `Donation – ${EVENT.name}`,
-              description: `${EVENT.venueName}, ${EVENT.dateLong}`,
-            },
-          },
-        },
-      ],
-      metadata: { kind: "donation", donationId: donation.id, reference: donation.reference },
-      payment_intent_data: {
-        description: `${EVENT.name} – donation ${donation.reference}`,
-        metadata: { kind: "donation", donationId: donation.id, reference: donation.reference },
-      },
-      expires_at: Math.floor(Date.now() / 1000) + CHECKOUT_HOLD_MINUTES * 60,
-      success_url: `${siteUrl()}/confirmation?ref=${encodeURIComponent(donation.reference)}&token=${encodeURIComponent(donation.accessToken)}`,
-      cancel_url: `${siteUrl()}/?checkout=cancelled#donate`,
+    const checkout = await createHostedCheckout({
+      reference: donation.reference,
+      amountPence: donation.amountPence,
+      currency: CURRENCY,
+      description: `Donation – ${EVENT.name} (${donation.reference})`.slice(0, 250),
+      redirectUrl: confirmationUrl(donation.reference, donation.accessToken),
+      callbackUrl: callbackUrl(),
+      validUntil: new Date(Date.now() + CHECKOUT_HOLD_MINUTES * 60_000),
     });
-    if (!session.url) throw new Error("Stripe did not return a checkout URL");
-    await db.donation.update({ where: { id: donation.id }, data: { stripeSessionId: session.id } });
-    return session.url;
+    await db.donation.update({
+      where: { id: donation.id },
+      data: { sumupCheckoutId: checkout.id, sumupCheckoutUrl: checkout.hosted_checkout_url },
+    });
+    return checkout.hosted_checkout_url!;
   } catch (err) {
     await db.donation.update({ where: { id: donation.id }, data: { status: "EXPIRED" } }).catch(() => {});
     throw err;
   }
 }
 
-export async function confirmPaidDonation(session: Stripe.Checkout.Session): Promise<Donation | null> {
-  if (session.payment_status !== "paid") return null;
-  const donationId = session.metadata?.donationId;
-  const donation = await db.donation.findFirst({
-    where: { OR: [{ stripeSessionId: session.id }, ...(donationId ? [{ id: donationId }] : [])] },
-  });
+export async function confirmPaidDonation(checkout: SumUpCheckout): Promise<Donation | null> {
+  if (checkout.status !== "PAID") return null;
+  const donation = await db.donation.findUnique({ where: { sumupCheckoutId: checkout.id } });
   if (!donation) {
-    console.error(`[stripe] Paid session ${session.id} has no matching donation`);
+    console.error(`[sumup] Paid checkout ${checkout.id} has no matching donation`);
     return null;
   }
-  if (session.amount_total !== donation.amountPence || session.currency !== CURRENCY) {
-    console.error(`[stripe] Amount mismatch for ${donation.reference}`);
+  const mismatch = checkoutMismatch(checkout, donation.amountPence, donation.reference);
+  if (mismatch) {
+    console.error(`[sumup] Checkout mismatch for ${donation.reference}: ${mismatch}`);
     return donation;
   }
   let current = donation;
   if (donation.status !== "PAID") {
     current = await db.donation.update({
       where: { id: donation.id },
-      data: { status: "PAID", paidAt: new Date(), paymentIntentId: paymentIntentId(session) },
+      data: { status: "PAID", paidAt: new Date(), sumupTransactionId: checkoutTransactionId(checkout) },
     });
   }
   await sendDonationEmail(current.id);

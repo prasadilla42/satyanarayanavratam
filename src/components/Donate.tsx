@@ -162,7 +162,7 @@ export function Donate() {
           {submitting && <Spinner />}
           {label}
         </button>
-        <p className="mt-3 text-center text-xs text-ink/60">Secure payment by Stripe. You can donate without buying a ticket.</p>
+        <p className="mt-3 text-center text-xs text-ink/60">Secure payment by SumUp. You can donate without buying a ticket.</p>
       </form>
     </section>
   );

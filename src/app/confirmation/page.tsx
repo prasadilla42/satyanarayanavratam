@@ -3,10 +3,9 @@ import Link from "next/link";
 import { Suspense } from "react";
 import type { Booking, Donation } from "@prisma/client";
 import { AutoRefresh } from "@/components/AutoRefresh";
-import { confirmPaidBooking, confirmPaidDonation } from "@/lib/bookings";
+import { settleCheckout } from "@/lib/bookings";
 import { EVENT, TICKETS, formatGBP } from "@/lib/config";
 import { db } from "@/lib/db";
-import { stripe } from "@/lib/stripe";
 
 export const metadata: Metadata = {
   title: `Confirmation | ${EVENT.name}`,
@@ -16,20 +15,17 @@ export const metadata: Metadata = {
 const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
 /**
- * The webhook is the primary way payments are confirmed. If the visitor lands
- * here before it has arrived, ask Stripe directly so they see the right state.
+ * SumUp's callback normally confirms payments. If the visitor lands here before it has arrived,
+ * ask SumUp directly (the same verification the callback uses) so they see the right state.
  */
-async function verifyWithStripe(sessionId: string | null, kind: "booking" | "donation") {
-  if (!sessionId) return;
+async function verifyWithSumUp(checkoutId: string | null) {
+  if (!checkoutId) return;
   try {
-    const session = await stripe().checkout.sessions.retrieve(sessionId);
-    if (kind === "booking") await confirmPaidBooking(session);
-    else await confirmPaidDonation(session);
+    await settleCheckout(checkoutId);
   } catch (err) {
-    console.error("[confirmation] could not verify with Stripe", err);
+    console.error("[confirmation] could not verify with SumUp", err);
   }
 }
-
 export default function ConfirmationPage({ searchParams }: PageProps<"/confirmation">) {
   return (
     <main className="pattern-cream flex min-h-screen items-center justify-center px-4 py-10">
@@ -65,13 +61,13 @@ async function ConfirmationContent({
     if (ref.startsWith("DON")) {
       donation = await db.donation.findFirst({ where: { reference: ref, accessToken: token } });
       if (donation && donation.status === "PENDING") {
-        await verifyWithStripe(donation.stripeSessionId, "donation");
+        await verifyWithSumUp(donation.sumupCheckoutId);
         donation = await db.donation.findUnique({ where: { id: donation.id } });
       }
     } else {
       booking = await db.booking.findFirst({ where: { reference: ref, accessToken: token } });
       if (booking && booking.status === "PENDING") {
-        await verifyWithStripe(booking.stripeSessionId, "booking");
+        await verifyWithSumUp(booking.sumupCheckoutId);
         booking = await db.booking.findUnique({ where: { id: booking.id } });
       }
     }

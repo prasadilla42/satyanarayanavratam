@@ -12,7 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "node scripts/migrate.mjs",
     "test:smoke": "node scripts/smoke-test.mjs",
-    "test:paid": "node scripts/paid-flow-test.mjs",
+    "test:paid": "node scripts/sumup-flow-test.mjs",
     "test:admin": "node scripts/admin-test.mjs"
   },
   "dependencies": {
@@ -21,7 +21,6 @@
     "nodemailer": "^10.1.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "stripe": "^23.0.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {

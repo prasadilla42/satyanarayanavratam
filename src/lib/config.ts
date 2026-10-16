@@ -61,8 +61,8 @@ export const DONATION_PRESETS_GBP = [5, 11, 21, 51, 101];
 export const DONATION_MIN_PENCE = 100; // £1
 export const DONATION_MAX_PENCE = 1_000_000; // £10,000
 
-/** How long seats are held while a visitor is on the Stripe payment page. */
-export const CHECKOUT_HOLD_MINUTES = 31; // Stripe's minimum session life is 30 min
+/** How long seats are held while a visitor is on the SumUp payment page. */
+export const CHECKOUT_HOLD_MINUTES = 30; // SumUp Hosted Checkout sessions last 30 minutes
 /** Extra grace before a held booking stops counting against capacity. */
 export const HOLD_GRACE_MINUTES = 5;
 

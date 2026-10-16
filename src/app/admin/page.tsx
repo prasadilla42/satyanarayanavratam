@@ -70,7 +70,7 @@ async function Dashboard() {
       {needsRefund.length > 0 && (
         <div className="mt-6 rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-900">
           <strong>Action needed:</strong> {needsRefund.length} booking(s) were paid after the seats were released
-          and the event was full. Please refund them in Stripe:{" "}
+          and the event was full. Please refund them in your SumUp dashboard:{" "}
           {needsRefund.map((b) => b.reference).join(", ")}
         </div>
       )}
