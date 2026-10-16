@@ -8,9 +8,21 @@ import { EVENT, TICKETS, formatGBP, siteUrl } from "./config";
 
 let transporter: Transporter | null = null;
 
+/** Strips quotes, spaces and a pasted "NAME=" prefix, common copy-paste mistakes in env settings. */
+function cleanEnv(value: string | undefined): string {
+  return (value ?? "")
+    .trim()
+    .replace(/^[A-Za-z_][A-Za-z0-9_]*\s*=\s*/, "")
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .trim();
+}
+
+const gmailUser = () => cleanEnv(process.env.GMAIL_USER);
+
 function getTransporter(): Transporter | null {
-  const user = process.env.GMAIL_USER;
-  const pass = process.env.GMAIL_APP_PASSWORD?.replace(/\s+/g, "");
+  const user = gmailUser();
+  // Google shows the App Password as 4 groups of 4 letters separated by spaces; spaces are not part of it
+  const pass = cleanEnv(process.env.GMAIL_APP_PASSWORD).replace(/\s+/g, "");
   if (!user || !pass) return null;
   if (!transporter) {
     transporter = nodemailer.createTransport({
@@ -47,8 +59,8 @@ async function send(message: Message): Promise<boolean> {
   const fromName = process.env.EMAIL_FROM_NAME || EVENT.name;
   const bcc = process.env.ORGANISER_NOTIFY_EMAIL || undefined;
   await t.sendMail({
-    from: { name: fromName, address: process.env.GMAIL_USER! },
-    replyTo: EVENT.contact.email || process.env.GMAIL_USER,
+    from: { name: fromName, address: gmailUser() },
+    replyTo: EVENT.contact.email || gmailUser(),
     to: message.to,
     bcc,
     subject: message.subject,
