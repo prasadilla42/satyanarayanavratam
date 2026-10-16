@@ -1,12 +1,10 @@
-import nodemailer, { type Transporter } from "nodemailer";
 import type { Booking, Donation } from "@prisma/client";
 import { EVENT, TICKETS, formatGBP, siteUrl } from "./config";
 
 /* ------------------------------------------------------------------ */
-/* Transport (Gmail SMTP using an App Password)                        */
+/* Sending (Brevo transactional email API)                             */
+/*   https://developers.brevo.com/reference/send-transac-email         */
 /* ------------------------------------------------------------------ */
-
-let transporter: Transporter | null = null;
 
 /** Strips quotes, spaces and a pasted "NAME=" prefix, common copy-paste mistakes in env settings. */
 function cleanEnv(value: string | undefined): string {
@@ -17,23 +15,11 @@ function cleanEnv(value: string | undefined): string {
     .trim();
 }
 
-const gmailUser = () => cleanEnv(process.env.GMAIL_USER);
-
-function getTransporter(): Transporter | null {
-  const user = gmailUser();
-  // Google shows the App Password as 4 groups of 4 letters separated by spaces; spaces are not part of it
-  const pass = cleanEnv(process.env.GMAIL_APP_PASSWORD).replace(/\s+/g, "");
-  if (!user || !pass) return null;
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: "smtp.gmail.com",
-      port: 465,
-      secure: true,
-      auth: { user, pass },
-    });
-  }
-  return transporter;
-}
+const brevoApiKey = () => cleanEnv(process.env.BREVO_API_KEY);
+/** Must be a sender (or an address on an authenticated domain) set up in Brevo. */
+const fromAddress = () => cleanEnv(process.env.EMAIL_FROM_ADDRESS);
+// BREVO_API_BASE exists only so the local test script can point at a fake Brevo server.
+const brevoBase = () => (cleanEnv(process.env.BREVO_API_BASE) || "https://api.brevo.com").replace(/\/+$/, "");
 
 interface Message {
   to: string;
@@ -43,33 +29,58 @@ interface Message {
 }
 
 /**
- * Sends an email from the organiser's Gmail account.
- * Returns true when sent. If Gmail is not configured the message is logged
- * (handy for local development) and false is returned so callers can retry later.
+ * Sends an email through Brevo. Returns true when Brevo accepted it.
+ * If Brevo is not configured the message is logged (handy for local development) and false
+ * is returned so callers can retry later. Any other problem throws with a readable message.
  */
 async function send(message: Message): Promise<boolean> {
-  const t = getTransporter();
-  if (!t) {
+  const apiKey = brevoApiKey();
+  const from = fromAddress();
+  if (!apiKey || !from) {
     console.warn(
-      "[email] GMAIL_USER / GMAIL_APP_PASSWORD not set – email NOT sent.\n" +
+      "[email] BREVO_API_KEY / EMAIL_FROM_ADDRESS not set – email NOT sent.\n" +
         `  To: ${message.to}\n  Subject: ${message.subject}\n\n${message.text}\n`,
     );
     return false;
   }
-  const fromName = process.env.EMAIL_FROM_NAME || EVENT.name;
-  const bcc = process.env.ORGANISER_NOTIFY_EMAIL || undefined;
-  await t.sendMail({
-    from: { name: fromName, address: gmailUser() },
-    replyTo: EVENT.contact.email || gmailUser(),
-    to: message.to,
-    bcc,
-    subject: message.subject,
-    html: message.html,
-    text: message.text,
-  });
+
+  const bcc = cleanEnv(process.env.ORGANISER_NOTIFY_EMAIL);
+  const replyTo = EVENT.contact.email || from;
+
+  let res: Response;
+  try {
+    res = await fetch(`${brevoBase()}/v3/smtp/email`, {
+      method: "POST",
+      headers: { "api-key": apiKey, "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify({
+        sender: { name: cleanEnv(process.env.EMAIL_FROM_NAME) || EVENT.name, email: from },
+        to: [{ email: message.to }],
+        ...(bcc ? { bcc: [{ email: bcc }] } : {}),
+        replyTo: { email: replyTo },
+        subject: message.subject,
+        htmlContent: message.html,
+        textContent: message.text,
+        tags: ["satyanarayana-vratam"],
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch (err) {
+    throw new Error(`Could not reach Brevo: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { code?: string; message?: string } | null;
+    const hint =
+      res.status === 401
+        ? " (the API key is wrong, expired or blocked – create a new one in Brevo: Settings → SMTP & API → API Keys; if IP blocking is on, authorize this server's IP)"
+        : res.status === 400
+          ? ` (check that EMAIL_FROM_ADDRESS "${from}" is a verified sender in Brevo)`
+          : "";
+    throw new Error(`Brevo rejected the email: ${res.status} ${body?.code ?? ""} ${body?.message ?? ""}${hint}`.replace(/\s+/g, " "));
+  }
   return true;
 }
-
 /* ------------------------------------------------------------------ */
 /* Template helpers                                                    */
 /* ------------------------------------------------------------------ */
