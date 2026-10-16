@@ -3,7 +3,7 @@
 Single-page event site: event info, ticket booking, donations and venue details on one page.
 SumUp Hosted Checkout opens only when payment is needed; free registrations are confirmed instantly.
 
-**Stack:** Next.js (App Router) · TypeScript · Tailwind CSS · SumUp Hosted Checkout · PostgreSQL + Prisma · Gmail (Nodemailer) · Vercel
+**Stack:** Next.js (App Router) · TypeScript · Tailwind CSS · SumUp Hosted Checkout · PostgreSQL + Prisma · Brevo email · Vercel
 
 ## How it works
 
@@ -73,18 +73,25 @@ sandbox, by design.) Switch to the live account's key + code before going public
 
 Local testing without a SumUp account: `.env` points `SUMUP_API_BASE` at a fake SumUp server started by
 `npm run test:paid`. Remove `SUMUP_API_BASE` when using real SumUp keys.
-### 4. Gmail confirmation emails
+### 4. Confirmation emails (Brevo)
 
-Emails are sent from your Gmail account over SMTP using an **App Password** (not your normal password):
+Emails are sent with the [Brevo](https://www.brevo.com) transactional email API (free plan: 300 emails/day,
+plenty for 350 bookings). You need three values:
 
-1. Turn on **2-Step Verification** for the Gmail account.
-2. Go to <https://myaccount.google.com/apppasswords>, create an app password, and copy the 16 characters.
-3. Set `GMAIL_USER` (the Gmail address) and `GMAIL_APP_PASSWORD`.
+1. **`BREVO_API_KEY`** – Brevo → account menu → **Settings → SMTP & API → API Keys → Generate a new API key**.
+   Copy it at once (it starts with `xkeysib-`; Brevo shows it only once). This is the *API key*, not the *SMTP key*.
+2. **`EMAIL_FROM_ADDRESS`** – the address the emails come from. In Brevo go to **Settings → Senders, Domains,
+   IPs → Senders → Add a sender**, then type in the 6-digit code Brevo emails to that address.
+   * Best deliverability: first **authenticate your own domain** (Brevo gives you DNS records for DKIM / DMARC)
+     and use an address on it, e.g. `bookings@rsnv.org`. Senders on an authenticated domain need no extra verification.
+   * A `@gmail.com` / `@yahoo.com` sender can be verified, but those domains can't be authenticated, so
+     mail is more likely to land in spam.
+   * Never use the `…@smtp-brevo.com` SMTP login as the sender.
+3. `EMAIL_FROM_NAME` (optional display name) and `ORGANISER_NOTIFY_EMAIL` (optional BCC of every email).
 
-Gmail allows ~500 emails/day for personal accounts, which is plenty for 350 bookings.
-If Gmail isn't configured, emails are printed to the server log instead of being sent.
+New Brevo accounts sometimes need transactional sending activated: if emails are rejected, contact Brevo support.
+If Brevo isn't configured, emails are printed to the server log instead of being sent.
 Each email is sent at most once; if sending fails, use **Resend** in the admin dashboard.
-
 ### 5. Run locally
 
 ```bash
@@ -136,6 +143,6 @@ src/app/admin/                Protected dashboard
 src/app/api/                  bookings, donations, availability, SumUp callback, CSV export
 src/lib/bookings.ts           Capacity, duplicate rules, SumUp checkouts, payment verification
 src/lib/sumup.ts              SumUp Checkouts API client
-src/lib/email.ts              Gmail sender + email templates
+src/lib/email.ts              Brevo sender + email templates
 src/proxy.ts                  Basic-auth protection for /admin
 ```

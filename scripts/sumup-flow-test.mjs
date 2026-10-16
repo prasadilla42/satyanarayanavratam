@@ -29,7 +29,7 @@ const check = (name, cond, extra) => {
 
 /* ---------------- fake SumUp API ---------------- */
 const checkouts = new Map();
-const calls = { create: [], get: 0, auth: [] };
+const calls = { create: [], get: 0, auth: [], emails: [] };
 let failNext = false;
 
 const fake = createServer((req, res) => {
@@ -40,6 +40,16 @@ const fake = createServer((req, res) => {
       res.writeHead(status, { "content-type": "application/json" });
       res.end(body === undefined ? "" : JSON.stringify(body));
     };
+    // Fake Brevo transactional email API
+    if (req.method === "POST" && req.url === "/v3/smtp/email") {
+      if (req.headers["api-key"] !== "xkeysib-dummy-local") return send(401, { code: "unauthorized", message: "Key not found" });
+      const b = JSON.parse(raw);
+      if (!b.sender?.email || !b.to?.[0]?.email || !b.subject || !(b.htmlContent || b.textContent)) {
+        return send(400, { code: "missing_parameter", message: "sender, to, subject and content are required" });
+      }
+      calls.emails.push(b);
+      return send(201, { messageId: `<${randomUUID()}@fake>` });
+    }
     calls.auth.push(req.headers.authorization);
     if (req.headers.authorization !== `Bearer ${API_KEY}`) return send(401, { message: "Unauthorized" });
 
@@ -180,10 +190,15 @@ try {
   b1 = await db.booking.findUnique({ where: { id: b1.id } });
   check("booking CONFIRMED + paidAt set", b1.status === "CONFIRMED" && b1.paidAt, b1.status);
   check("SumUp transaction code stored", /^TAAA/.test(b1.sumupTransactionId ?? ""), b1.sumupTransactionId);
-  console.log("  (email: only sent if GMAIL_USER / GMAIL_APP_PASSWORD are set; otherwise printed in the server log)");
+  await new Promise((r) => setTimeout(r, 1500));
+  const mail = calls.emails.find((m) => m.to[0].email === who(1).email);
+  check("confirmation email sent through Brevo to the customer", !!mail, calls.emails.map((m) => m.to));
+  check("email has sender, subject with reference, HTML + text", !!mail && mail.sender.email === "bookings@example.com" && mail.subject.includes(b1.reference) && mail.htmlContent.includes(b1.reference) && !!mail.textContent, mail?.subject);
   check("callback replay is idempotent", (await callback(b1.sumupCheckoutId)) === 204);
   a = await avail();
   check("seats counted once", a.yajamani.taken === before.yajamani.taken + 2 && a.general.taken === before.general.taken + 1, a);
+  await new Promise((r) => setTimeout(r, 1000));
+  check("replayed callback did NOT send a second email", calls.emails.filter((m) => m.to[0].email === who(1).email).length === 1, calls.emails.length);
 
   console.log("duplicate + resume");
   r = await post("/api/bookings", { ...who(1), yajamaniQty: 1 }, ip());
