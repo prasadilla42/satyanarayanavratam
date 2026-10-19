@@ -4,6 +4,7 @@ import { useState } from "react";
 import { DONATION_MAX_PENCE, DONATION_MIN_PENCE, DONATION_PRESETS_GBP, formatGBP } from "@/lib/config";
 import { donationSchema, fieldErrors } from "@/lib/validation";
 import { Field, SectionHeading, Spinner, inputClass } from "./ui";
+import { PrivacyNotice } from "./PrivacyNotice";
 
 type Errors = Record<string, string>;
 
@@ -163,6 +164,7 @@ export function Donate() {
           {label}
         </button>
         <p className="mt-3 text-center text-xs text-ink/60">Secure payment by SumUp. You can donate without buying a ticket.</p>
+        <PrivacyNotice className="mt-3 text-center text-ink/50" />
       </form>
     </section>
   );

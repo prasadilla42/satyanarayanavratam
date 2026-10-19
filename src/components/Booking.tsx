@@ -5,6 +5,7 @@ import { MAX_PER_BOOKING, TICKETS, formatGBP } from "@/lib/config";
 import { bookingSchema, fieldErrors } from "@/lib/validation";
 import type { Availability } from "@/lib/bookings";
 import { Field, SectionHeading, Spinner, inputClass } from "./ui";
+import { PrivacyNotice } from "./PrivacyNotice";
 
 type TicketKey = "yajamani" | "general";
 type Errors = Record<string, string>;
@@ -377,6 +378,7 @@ export function Booking() {
             <p className="mt-2 text-center text-xs text-ink/60">
               One booking per email address / phone number. Need more places? Add them to the same booking.
             </p>
+            <PrivacyNotice className="mt-3 text-center text-ink/50" />
           </div>
         </aside>
       </form>

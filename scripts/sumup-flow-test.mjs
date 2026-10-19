@@ -263,6 +263,9 @@ try {
   await callback(d1.sumupCheckoutId);
   d1 = await db.donation.findUnique({ where: { id: d1.id } });
   check("genuine payment marks donation PAID", d1.status === "PAID" && !!d1.paidAt && !!d1.sumupTransactionId, d1.status);
+  await callback(d1.sumupCheckoutId); // replay must not email again
+  const donorMails = calls.emails.filter((m) => m.to[0].email === `donor-${run}@example.com`);
+  check("donor gets exactly one thank-you email with reference and amount", donorMails.length === 1 && donorMails[0].subject.includes(d1.reference) && donorMails[0].htmlContent.includes("£21"), donorMails.map((m) => m.subject));
 
   console.log("Yajamani limit of 50");
   let cur = (await avail()).yajamani;

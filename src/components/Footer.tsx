@@ -1,4 +1,5 @@
 import { EVENT } from "@/lib/config";
+import { PrivacyNotice } from "./PrivacyNotice";
 
 export function Footer() {
   return (
@@ -10,6 +11,7 @@ export function Footer() {
       <p className="text-sm">
         {EVENT.venueName}, {EVENT.address}
       </p>
+      <PrivacyNotice className="mx-auto mt-6 max-w-2xl border-t border-cream/15 pt-4 text-cream/60" />
     </footer>
   );
 }
