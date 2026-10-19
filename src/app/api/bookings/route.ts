@@ -8,6 +8,9 @@ import {
 import { clientIp, rateLimit } from "@/lib/ratelimit";
 import { bookingSchema, fieldErrors } from "@/lib/validation";
 
+// Lets the background payment check (watchCheckout) keep running after the response is sent.
+export const maxDuration = 300;
+
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 export async function POST(req: Request) {

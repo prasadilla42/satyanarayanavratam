@@ -267,6 +267,19 @@ try {
   const donorMails = calls.emails.filter((m) => m.to[0].email === `donor-${run}@example.com`);
   check("donor gets exactly one thank-you email with reference and amount", donorMails.length === 1 && donorMails[0].subject.includes(d1.reference) && donorMails[0].htmlContent.includes("£21"), donorMails.map((m) => m.subject));
 
+  console.log("background payment check (no callback, customer never comes back)");
+  r = await post("/api/donations", { name: "Donor Two", email: `donor2-${run}@example.com`, amountPence: 1500, message: "", website: "" }, ip());
+  let d2 = await db.donation.findFirst({ where: { email: `donor2-${run}@example.com` } });
+  check("second donation started", r.status === 200 && d2?.status === "PENDING", r);
+  pay(fakeFor(d2), { amount: 15 });
+  for (let i = 0; i < 30 && d2.status !== "PAID"; i++) {
+    await new Promise((res) => setTimeout(res, 1000));
+    d2 = await db.donation.findUnique({ where: { id: d2.id } });
+  }
+  check("paid donation confirmed by the background check, without any callback", d2.status === "PAID", d2.status);
+  await new Promise((res) => setTimeout(res, 1500));
+  check("and the donor was emailed", calls.emails.filter((m) => m.to[0].email === `donor2-${run}@example.com`).length === 1, calls.emails.map((m) => m.to));
+
   console.log("Yajamani limit of 50");
   let cur = (await avail()).yajamani;
   const fill = cur.remaining - 1;

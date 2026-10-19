@@ -1,4 +1,5 @@
 import { Prisma, type Booking, type Donation } from "@prisma/client";
+import { after } from "next/server";
 import { db } from "./db";
 import {
   BOOKING_REF_PREFIX,
@@ -223,6 +224,7 @@ export async function startBookingCheckout(booking: Booking): Promise<string> {
       where: { id: booking.id },
       data: { sumupCheckoutId: checkout.id, sumupCheckoutUrl: checkout.hosted_checkout_url },
     });
+    after(() => watchCheckout(checkout.id));
     return checkout.hosted_checkout_url!;
   } catch (err) {
     // Release the seats straight away
@@ -230,6 +232,32 @@ export async function startBookingCheckout(booking: Booking): Promise<string> {
       .update({ where: { id: booking.id }, data: { status: "CANCELLED" } })
       .catch(() => {});
     throw err;
+  }
+}
+
+const WATCH_INTERVAL_MS = 8_000;
+
+/**
+ * Safety net that does not depend on SumUp's callback or on the customer coming back to our
+ * site: for a few minutes after a checkout is created we ask SumUp every few seconds whether it
+ * has been paid. As soon as it is, the booking/donation is confirmed and the email is sent.
+ * Run it with `after()` from a route that sets `maxDuration` (the loop stops before that limit).
+ * CHECKOUT_WATCH_SECONDS=0 turns it off.
+ */
+export async function watchCheckout(checkoutId: string): Promise<void> {
+  const seconds = Number(process.env.CHECKOUT_WATCH_SECONDS ?? 270);
+  const end = Date.now() + (Number.isFinite(seconds) ? seconds : 270) * 1000;
+  while (Date.now() + WATCH_INTERVAL_MS < end) {
+    await new Promise((r) => setTimeout(r, WATCH_INTERVAL_MS));
+    try {
+      const checkout = await getCheckout(checkoutId);
+      if (checkout.status === "PAID" || checkout.status === "EXPIRED") {
+        await settleCheckout(checkoutId);
+        return;
+      }
+    } catch (err) {
+      console.error("[sumup] watch failed for", checkoutId, err instanceof Error ? err.message : err);
+    }
   }
 }
 
@@ -438,6 +466,7 @@ export async function createDonationCheckout(input: DonationInput): Promise<stri
       where: { id: donation.id },
       data: { sumupCheckoutId: checkout.id, sumupCheckoutUrl: checkout.hosted_checkout_url },
     });
+    after(() => watchCheckout(checkout.id));
     return checkout.hosted_checkout_url!;
   } catch (err) {
     await db.donation.update({ where: { id: donation.id }, data: { status: "EXPIRED" } }).catch(() => {});
@@ -543,6 +572,37 @@ export async function adminDeleteBooking(id: string) {
 }
 
 /** Permanently deletes a donation record. Does not refund. */
+/**
+ * Asks SumUp whether a booking / donation was actually paid. If it was, it is confirmed and its
+ * email is sent (same code path as SumUp's callback). Use when a payment was made but the
+ * callback never arrived.
+ */
+export async function adminCheckPayment(kind: "booking" | "donation", id: string): Promise<AdminResult> {
+  const row =
+    kind === "booking"
+      ? await db.booking.findUnique({ where: { id }, select: { sumupCheckoutId: true } })
+      : await db.donation.findUnique({ where: { id }, select: { sumupCheckoutId: true } });
+  if (!row) return { ok: false, message: "Not found." };
+  if (!row.sumupCheckoutId) return { ok: false, message: "No SumUp payment was started for this record." };
+
+  try {
+    const checkout = await getCheckout(row.sumupCheckoutId);
+    await settleCheckout(row.sumupCheckoutId);
+    if (checkout.status === "PAID") {
+      const after =
+        kind === "booking"
+          ? (await db.booking.findUnique({ where: { id }, select: { status: true } }))?.status
+          : (await db.donation.findUnique({ where: { id }, select: { status: true } }))?.status;
+      if (after === "CONFIRMED" || after === "PAID") return { ok: true, message: "Paid – confirmed, email sent." };
+      return { ok: false, message: `SumUp says paid but the record is ${after ?? "missing"} (see server logs).` };
+    }
+    return { ok: false, message: `SumUp says: ${checkout.status.toLowerCase()} – no payment received.` };
+  } catch (err) {
+    console.error("[sumup] admin payment check failed", err instanceof Error ? err.message : err);
+    return { ok: false, message: err instanceof Error ? err.message : "Could not check with SumUp." };
+  }
+}
+
 export async function adminDeleteDonation(id: string) {
   const donation = await db.donation.findUnique({ where: { id } });
   if (!donation) return;
